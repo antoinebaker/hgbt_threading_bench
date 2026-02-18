@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""
+Run HistGradientBoosting fit/predict benchmark across data shapes and thread counts.
+Saves bench_num_threads.{run_id}.csv with CPU/platform metadata for cross-platform comparison.
+See: https://github.com/scikit-learn/scikit-learn/issues/30662
+"""
+
+import argparse
+import os
+import platform
+from datetime import datetime
+from time import perf_counter
+
+import pandas as pd
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.datasets import make_regression
+from threadpoolctl import threadpool_limits
+
+
+def get_cpu_info():
+    """Collect CPU and platform info (portable). Uses psutil for physical cores if available."""
+    info = {
+        "platform": platform.system(),
+        "machine": platform.machine(),
+        "processor": platform.processor() or "",
+        "cpu_logical_cores": os.cpu_count() or 0,
+        "cpu_physical_cores": None,
+    }
+    try:
+        import psutil
+        info["cpu_physical_cores"] = psutil.cpu_count(logical=False) or info["cpu_logical_cores"]
+    except ImportError:
+        info["cpu_physical_cores"] = info["cpu_logical_cores"]
+    return info
+
+
+def estimate_time(func, *args, min_time=2):
+    """Repeatedly call func(*args) until total elapsed time >= min_time; return mean time per call."""
+    n_calls = 0
+    total_time = 0.0
+    while total_time < min_time:
+        start = perf_counter()
+        _ = func(*args)
+        end = perf_counter()
+        total_time += end - start
+        n_calls += 1
+    return total_time / n_calls
+
+
+def main():
+    parser = argparse.ArgumentParser(description="HGBT threading benchmark")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output CSV path. Default: bench_num_threads.{run_id}.csv in current directory.",
+    )
+    parser.add_argument(
+        "--min-time",
+        type=float,
+        default=2.0,
+        help="Minimum seconds per (shape, thread) for timing (default: 2).",
+    )
+    args = parser.parse_args()
+
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    cpu_info = get_cpu_info()
+    default_output = f"bench_num_threads.{run_id}.csv"
+    output_path = args.output or default_output
+
+    data_shapes = [
+        (100, 10),
+        (1_000, 10),
+        (10_000, 10),
+        (100_000, 10),
+        (1_000_000, 10),
+        (100, 100),
+        (1_000, 100),
+        (10_000, 100),
+        (100_000, 100),
+        (1_000_000, 100),
+        (100, 1_000),
+        (1_000, 1_000),
+    ]
+    all_max_num_threads = [1, 2, 4, 8]
+
+    records = []
+    for max_num_threads in all_max_num_threads:
+        for n_samples, n_features in data_shapes:
+            X, y = make_regression(
+                n_samples=n_samples, n_features=n_features, random_state=0
+            )
+            with threadpool_limits(limits=max_num_threads):
+                hgbt = HistGradientBoostingRegressor()
+                fit_time = estimate_time(hgbt.fit, X, y, min_time=args.min_time)
+                predict_time = estimate_time(hgbt.predict, X, min_time=args.min_time)
+            record = {
+                "n_samples": n_samples,
+                "n_features": n_features,
+                "max_num_threads": max_num_threads,
+                "fit_time": fit_time,
+                "predict_time": predict_time,
+                "run_id": run_id,
+                "run_timestamp": datetime.now().isoformat(),
+                **cpu_info,
+            }
+            print(record)
+            records.append(record)
+
+    df = pd.DataFrame(records)
+    df.to_csv(output_path, index=False)
+    print(f"Wrote {output_path}")
+
+
+if __name__ == "__main__":
+    main()
