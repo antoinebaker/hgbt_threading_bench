@@ -35,7 +35,7 @@ python run_benchmark.py
 - Saves the speedup curves as `results/speedup_curves.{run_id}.png` (one figure with 2×3 subplots and CPU info at the bottom).
 - The CSV has one row per (shape, thread): `n_samples`, `n_features`, `max_num_threads`, `fit_time`, `predict_time`, `run_id`.
 
-## Plot results
+## Re-plot results
 
 ```bash
 python plot_results.py <run_id>
