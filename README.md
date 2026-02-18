@@ -27,23 +27,21 @@ pip install -r requirements.txt
 ## Run benchmark
 
 ```bash
-python run_benchmark.py [--output bench_num_threads.{run_id}.csv] [--min-time 2]
+python run_benchmark.py [--min-time 2]
 ```
 
-- Writes **one CSV per run** as `bench_num_threads.{run_id}.csv` by default (e.g. `bench_num_threads.20250218_143022.csv`). Override with `--output path.csv`.
-- Each row: `n_samples`, `n_features`, `max_num_threads`, `fit_time`, `predict_time`, plus CPU columns: `platform`, `machine`, `processor`, `cpu_physical_cores`, `cpu_logical_cores`, `run_id`, `run_timestamp`.
+- Writes to **results/**: `bench_num_threads.{run_id}.csv` and `bench_num_threads.{run_id}.cpu.json` (e.g. `bench_num_threads.20260218_160458.csv`). The CSV has one row per (X_shape, max_num_threads): `n_samples`, `n_features`, `max_num_threads`, `fit_time`, `predict_time`, `run_id`. CPU metadata (system, machine, processor, cores) is in the JSON only.
 
 ## Plot results
 
 ```bash
-python plot_results.py [--input bench_num_threads.20250218_143022.csv] [--output-dir .] [--show]
+python plot_results.py <run_id>
 ```
 
-- Reads the CSV, computes fit/predict speedup vs single-thread, and saves one PNG per `n_features` (10, 100, 1000): `speedup_curves_n_features_{10,100,1000}.{run_id}.png` in `--output-dir`.
-- Use `--show` to display plots after saving.
+Example:
 
-## Multi-platform comparison
+```bash
+python plot_results.py 20260218_160458
+```
 
-1. Run `run_benchmark.py` on each machine (or with different core affinity, e.g. `OMP_NUM_THREADS=4 python run_benchmark.py`).
-2. Copy or concatenate the resulting CSVs (each has a unique `run_id` and CPU columns).
-3. Run `plot_results.py --input <each_csv>` to get figures per run; compare speedup curves across platform/machine/core count to see where threading helps or hurts and tune heuristics (e.g. when to disable or cap threads by data shape and core count).
+- Reads `results/bench_num_threads.{run_id}.csv` and `results/bench_num_threads.{run_id}.cpu.json`, computes fit/predict speedup vs single-thread, and saves **results/speedup_curves.{run_id}.png** (one figure with 2×3 subplots and CPU info at the bottom).

@@ -9,10 +9,6 @@ __pycache__/
 *.egg-info/
 .eggs/
 
-# Benchmark outputs
-*.csv
-*.png
-
 # Editor
 .vscode/
 .idea/

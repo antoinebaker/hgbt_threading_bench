@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import NullLocator
 import pandas as pd
 
 
@@ -85,8 +86,7 @@ def main():
     cpu_text = format_cpu(cpu_info)
 
     n_features_list = [10, 100, 1000]
-    fig, axs = plt.subplots(2, 3, figsize=(12, 8))
-    fig.subplots_adjust(bottom=0.22)
+    fig, axs = plt.subplots(2, 3, figsize=(12, 8), sharex=True, sharey=True)
 
     for col, n_features in enumerate(n_features_list):
         # Row 0: fit
@@ -103,15 +103,16 @@ def main():
         ax.axhline(1, 0.95, 8.5, linestyle="--", color="gray")
         ax.set(
             xscale="log",
-            xlabel="Number of threads",
-            xticks=[1, 4, 8],
-            xticklabels=["1", "4", "8"],
+            xlabel="" if col > 0 else "",
+            xticks=[1, 2, 4, 8],
+            xticklabels=[1, 2, 4, 8],
             yscale="log",
-            ylabel="Speedup (fit)",
+            ylabel="Speedup (fit)" if col == 0 else "",
             yticks=[0.1, 0.2, 0.5, 1, 2, 5, 10],
             yticklabels=["0.1x", "0.2x", "0.5x", "1x", "2x", "5x", "10x"],
-            title=f"fit, n_features={n_features}",
+            title=f"n_features={n_features}",
         )
+        ax.xaxis.set_minor_locator(NullLocator())
 
         # Row 1: predict
         ax = axs[1, col]
@@ -127,15 +128,17 @@ def main():
         ax.set(
             xscale="log",
             xlabel="Number of threads",
-            xticks=[1, 4, 8],
-            xticklabels=["1", "4", "8"],
+            xticks=[1, 2, 4, 8],
+            xticklabels=[1, 2, 4, 8],
             yscale="log",
-            ylabel="Speedup (predict)",
+            ylabel="Speedup (predict)" if col == 0 else "",
             yticks=[0.1, 0.2, 0.5, 1, 2, 5, 10],
             yticklabels=["0.1x", "0.2x", "0.5x", "1x", "2x", "5x", "10x"],
-            title=f"predict, n_features={n_features}",
+            title="",
         )
+        ax.xaxis.set_minor_locator(NullLocator())
 
+    fig.tight_layout(rect=[0, 0.18, 1, 1])
     fig.text(0.02, 0.02, cpu_text, fontsize=7, verticalalignment="bottom", family="monospace")
     out_path = results_dir / f"speedup_curves.{run_id}.png"
     fig.savefig(out_path, dpi=150)
