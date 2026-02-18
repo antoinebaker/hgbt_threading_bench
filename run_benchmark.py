@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
 Run HistGradientBoosting fit/predict benchmark across data shapes and thread counts.
-Saves bench_num_threads.{run_id}.csv with CPU/platform metadata for cross-platform comparison.
+Writes results/bench_num_threads.{run_id}.csv and results/bench_num_threads.{run_id}.cpu.json.
 See: https://github.com/scikit-learn/scikit-learn/issues/30662
 """
 
 import argparse
+import json
 import os
 import platform
 from datetime import datetime
+from pathlib import Path
 from time import perf_counter
 
 import pandas as pd
@@ -20,17 +22,16 @@ from threadpoolctl import threadpool_limits
 def get_cpu_info():
     """Collect CPU and platform info (portable). Uses psutil for physical cores if available."""
     info = {
-        "platform": platform.system(),
+        "system": platform.system(),
         "machine": platform.machine(),
-        "processor": platform.processor() or "",
-        "cpu_logical_cores": os.cpu_count() or 0,
-        "cpu_physical_cores": None,
+        "processor": platform.processor(),
+        "cpu_logical_cores": os.cpu_count(),
     }
     try:
         import psutil
-        info["cpu_physical_cores"] = psutil.cpu_count(logical=False) or info["cpu_logical_cores"]
+        info["cpu_physical_cores"] = psutil.cpu_count(logical=False)
     except ImportError:
-        info["cpu_physical_cores"] = info["cpu_logical_cores"]
+        info["cpu_physical_cores"] = None
     return info
 
 
@@ -50,11 +51,6 @@ def estimate_time(func, *args, min_time=2):
 def main():
     parser = argparse.ArgumentParser(description="HGBT threading benchmark")
     parser.add_argument(
-        "--output",
-        default=None,
-        help="Output CSV path. Default: bench_num_threads.{run_id}.csv in current directory.",
-    )
-    parser.add_argument(
         "--min-time",
         type=float,
         default=2.0,
@@ -62,10 +58,13 @@ def main():
     )
     args = parser.parse_args()
 
+    results_dir = Path("results")
+    results_dir.mkdir(parents=True, exist_ok=True)
+
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     cpu_info = get_cpu_info()
-    default_output = f"bench_num_threads.{run_id}.csv"
-    output_path = args.output or default_output
+    csv_path = results_dir / f"bench_num_threads.{run_id}.csv"
+    cpu_path = results_dir / f"bench_num_threads.{run_id}.cpu.json"
 
     data_shapes = [
         (100, 10),
@@ -100,15 +99,17 @@ def main():
                 "fit_time": fit_time,
                 "predict_time": predict_time,
                 "run_id": run_id,
-                "run_timestamp": datetime.now().isoformat(),
-                **cpu_info,
             }
             print(record)
             records.append(record)
 
     df = pd.DataFrame(records)
-    df.to_csv(output_path, index=False)
-    print(f"Wrote {output_path}")
+    df.to_csv(csv_path, index=False)
+    print(f"Wrote {csv_path}")
+
+    with open(cpu_path, "w") as f:
+        json.dump({"run_id": run_id, **cpu_info}, f, indent=2)
+    print(f"Wrote {cpu_path}")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Load bench_num_threads CSV, compute fit/predict speedups vs single-thread,
-plot speedup vs max_num_threads, and save figures.
+Load bench_num_threads CSV from results/, compute fit/predict speedups vs single-thread,
+plot one combined figure (2×3 subplots) and save to results/speedup_curves.{run_id}.png.
 See: https://github.com/scikit-learn/scikit-learn/issues/30662
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -30,20 +31,75 @@ def compute_speedups(records):
     return pd.concat(speedups, ignore_index=True)
 
 
-def plot_speedup_curves(speedups, n_features, run_id, output_dir, show=False):
-    """One figure with two subplots (fit, predict) for the given n_features."""
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-    for ax, method in zip(axs, ["fit", "predict"]):
+def load_cpu_info(results_dir: Path, run_id: str) -> dict:
+    """Load CPU metadata from results/bench_num_threads.{run_id}.cpu.json."""
+    cpu_path = results_dir / f"bench_num_threads.{run_id}.cpu.json"
+    if not cpu_path.exists():
+        return {}
+    try:
+        with open(cpu_path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def format_cpu(cpu_dict: dict) -> str:
+    """Format CPU dict as multi-line string for figure text."""
+    if not cpu_dict:
+        return "CPU info not found"
+    # Exclude run_id from display if present; show CPU fields only
+    skip = {"run_id"}
+    lines = [f"{k}: {v}" for k, v in cpu_dict.items() if k not in skip]
+    return "\n".join(lines) if lines else "CPU info not found"
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Plot HGBT threading benchmark results")
+    parser.add_argument(
+        "run_id",
+        help="Run ID (e.g. 20260218_152651). Reads results/bench_num_threads.{run_id}.csv and .cpu.json.",
+    )
+    args = parser.parse_args()
+
+    run_id = args.run_id
+    results_dir = Path("results")
+    csv_path = results_dir / f"bench_num_threads.{run_id}.csv"
+
+    if not csv_path.exists():
+        print(f"Error: {csv_path} not found", file=sys.stderr)
+        sys.exit(1)
+
+    records = pd.read_csv(csv_path)
+    required = ["n_samples", "n_features", "max_num_threads", "fit_time", "predict_time", "run_id"]
+    missing = [c for c in required if c not in records.columns]
+    if missing:
+        print(f"Error: CSV missing columns: {missing}", file=sys.stderr)
+        sys.exit(1)
+
+    speedups = compute_speedups(records)
+    if speedups.empty:
+        print("Error: no groups (n_samples, n_features) with max_num_threads==1", file=sys.stderr)
+        sys.exit(1)
+
+    cpu_info = load_cpu_info(results_dir, run_id)
+    cpu_text = format_cpu(cpu_info)
+
+    n_features_list = [10, 100, 1000]
+    fig, axs = plt.subplots(2, 3, figsize=(12, 8))
+    fig.subplots_adjust(bottom=0.22)
+
+    for col, n_features in enumerate(n_features_list):
+        # Row 0: fit
+        ax = axs[0, col]
         subset = speedups.query("n_features == @n_features")
-        if subset.empty:
-            continue
-        for (n_samples, n_feat), group in subset.groupby(["n_samples", "n_features"]):
-            group.plot(
-                x="max_num_threads",
-                y=f"{method}_speedup",
-                ax=ax,
-                label=f"X.shape=({n_samples}, {n_feat})",
-            )
+        if not subset.empty:
+            for (n_samples, n_feat), group in subset.groupby(["n_samples", "n_features"]):
+                group.plot(
+                    x="max_num_threads",
+                    y="fit_speedup",
+                    ax=ax,
+                    label=f"X.shape=({n_samples}, {n_feat})",
+                )
         ax.axhline(1, 0.95, 8.5, linestyle="--", color="gray")
         ax.set(
             xscale="log",
@@ -51,70 +107,40 @@ def plot_speedup_curves(speedups, n_features, run_id, output_dir, show=False):
             xticks=[1, 4, 8],
             xticklabels=["1", "4", "8"],
             yscale="log",
-            ylabel=f"Speedup ({method})",
+            ylabel="Speedup (fit)",
             yticks=[0.1, 0.2, 0.5, 1, 2, 5, 10],
             yticklabels=["0.1x", "0.2x", "0.5x", "1x", "2x", "5x", "10x"],
-            title=f"Impact of threading on {method} time (n_features={n_features})",
+            title=f"fit, n_features={n_features}",
         )
-    fig.tight_layout()
-    out_path = output_dir / f"speedup_curves_n_features_{n_features}.{run_id}.png"
+
+        # Row 1: predict
+        ax = axs[1, col]
+        if not subset.empty:
+            for (n_samples, n_feat), group in subset.groupby(["n_samples", "n_features"]):
+                group.plot(
+                    x="max_num_threads",
+                    y="predict_speedup",
+                    ax=ax,
+                    label=f"X.shape=({n_samples}, {n_feat})",
+                )
+        ax.axhline(1, 0.95, 8.5, linestyle="--", color="gray")
+        ax.set(
+            xscale="log",
+            xlabel="Number of threads",
+            xticks=[1, 4, 8],
+            xticklabels=["1", "4", "8"],
+            yscale="log",
+            ylabel="Speedup (predict)",
+            yticks=[0.1, 0.2, 0.5, 1, 2, 5, 10],
+            yticklabels=["0.1x", "0.2x", "0.5x", "1x", "2x", "5x", "10x"],
+            title=f"predict, n_features={n_features}",
+        )
+
+    fig.text(0.02, 0.02, cpu_text, fontsize=7, verticalalignment="bottom", family="monospace")
+    out_path = results_dir / f"speedup_curves.{run_id}.png"
     fig.savefig(out_path, dpi=150)
     print(f"Saved {out_path}")
-    if show:
-        plt.show()
     plt.close(fig)
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Plot HGBT threading benchmark results")
-    parser.add_argument(
-        "--input",
-        default="bench_num_threads.csv",
-        help="Input CSV path (default: bench_num_threads.csv).",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=".",
-        help="Directory for saved PNGs (default: current directory).",
-    )
-    parser.add_argument(
-        "--show",
-        action="store_true",
-        help="Display plots interactively after saving.",
-    )
-    args = parser.parse_args()
-
-    input_path = Path(args.input)
-    if not input_path.exists():
-        print(f"Error: {input_path} not found", file=sys.stderr)
-        sys.exit(1)
-
-    records = pd.read_csv(input_path)
-    required = ["n_samples", "n_features", "max_num_threads", "fit_time", "predict_time"]
-    missing = [c for c in required if c not in records.columns]
-    if missing:
-        print(f"Error: CSV missing columns: {missing}", file=sys.stderr)
-        sys.exit(1)
-
-    # Use run_id from CSV if present (first row), else from filename stem (e.g. bench_num_threads.20250218_123456)
-    if "run_id" in records.columns and not records["run_id"].empty:
-        run_id = str(records["run_id"].iloc[0])
-    else:
-        run_id = input_path.stem.replace("bench_num_threads.", "") or "run"
-
-    speedups = compute_speedups(records)
-    if speedups.empty:
-        print("Error: no groups (n_samples, n_features) with max_num_threads==1", file=sys.stderr)
-        sys.exit(1)
-
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    for n_features in [10, 100, 1000]:
-        if (speedups["n_features"] == n_features).any():
-            plot_speedup_curves(
-                speedups, n_features, run_id, output_dir, show=args.show
-            )
 
 
 if __name__ == "__main__":
