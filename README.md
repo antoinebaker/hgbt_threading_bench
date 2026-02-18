@@ -27,10 +27,10 @@ pip install -r requirements.txt
 ## Run benchmark
 
 ```bash
-python run_benchmark.py [--min-time 2]
+python run_benchmark.py
 ```
 
-- Writes to **results/**: `bench_num_threads.{run_id}.csv` and `bench_num_threads.{run_id}.cpu.json` (e.g. `bench_num_threads.20260218_160458.csv`). The CSV has one row per (X_shape, max_num_threads): `n_samples`, `n_features`, `max_num_threads`, `fit_time`, `predict_time`, `run_id`. CPU metadata (system, machine, processor, cores) is in the JSON only.
+Writes to **results/**: `bench_num_threads.{run_id}.csv`, `bench_num_threads.{run_id}.cpu.json`, and `speedup_curves.{run_id}.png`. One command produces the CSV, CPU metadata, and the speedup plot. The CSV has one row per (shape, thread): `n_samples`, `n_features`, `max_num_threads`, `fit_time`, `predict_time`, `run_id`. CPU metadata (system, machine, processor, cores) is in the JSON only.
 
 ## Plot results
 
@@ -44,4 +44,4 @@ Example:
 python plot_results.py 20260218_160458
 ```
 
-- Reads `results/bench_num_threads.{run_id}.csv` and `results/bench_num_threads.{run_id}.cpu.json`, computes fit/predict speedup vs single-thread, and saves **results/speedup_curves.{run_id}.png** (one figure with 2×3 subplots and CPU info at the bottom).
+Use this to **re-plot** an existing run (e.g. after copying **results/** from another machine or to regenerate the figure without re-running the benchmark). Reads `results/bench_num_threads.{run_id}.csv` and `results/bench_num_threads.{run_id}.cpu.json`, and saves `results/speedup_curves.{run_id}.png` (one figure with 2×3 subplots and CPU info at the bottom).

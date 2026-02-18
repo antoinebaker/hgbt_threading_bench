@@ -111,6 +111,10 @@ def main():
         json.dump({"run_id": run_id, **cpu_info}, f, indent=2)
     print(f"Wrote {cpu_path}")
 
+    from plot_results import plot_run
+    plot_path = plot_run(run_id)
+    print(f"Wrote {plot_path}")
+
 
 if __name__ == "__main__":
     main()

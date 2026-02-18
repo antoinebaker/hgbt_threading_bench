@@ -32,8 +32,9 @@ def compute_speedups(records):
     return pd.concat(speedups, ignore_index=True)
 
 
-def load_cpu_info(results_dir: Path, run_id: str) -> dict:
+def load_cpu_info(run_id: str) -> dict:
     """Load CPU metadata from results/bench_num_threads.{run_id}.cpu.json."""
+    results_dir = Path("results")
     cpu_path = results_dir / f"bench_num_threads.{run_id}.cpu.json"
     if not cpu_path.exists():
         return {}
@@ -54,35 +55,24 @@ def format_cpu(cpu_dict: dict) -> str:
     return "\n".join(lines) if lines else "CPU info not found"
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Plot HGBT threading benchmark results")
-    parser.add_argument(
-        "run_id",
-        help="Run ID (e.g. 20260218_152651). Reads results/bench_num_threads.{run_id}.csv and .cpu.json.",
-    )
-    args = parser.parse_args()
-
-    run_id = args.run_id
+def plot_run(run_id: str) -> Path:
+    """Load CSV and CPU JSON, build speedup figure, save to results/speedup_curves.{run_id}.png. Returns path to PNG."""
     results_dir = Path("results")
     csv_path = results_dir / f"bench_num_threads.{run_id}.csv"
-
     if not csv_path.exists():
-        print(f"Error: {csv_path} not found", file=sys.stderr)
-        sys.exit(1)
+        raise FileNotFoundError(f"{csv_path} not found")
 
     records = pd.read_csv(csv_path)
     required = ["n_samples", "n_features", "max_num_threads", "fit_time", "predict_time", "run_id"]
     missing = [c for c in required if c not in records.columns]
     if missing:
-        print(f"Error: CSV missing columns: {missing}", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError(f"CSV missing columns: {missing}")
 
     speedups = compute_speedups(records)
     if speedups.empty:
-        print("Error: no groups (n_samples, n_features) with max_num_threads==1", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError("No groups (n_samples, n_features) with max_num_threads==1")
 
-    cpu_info = load_cpu_info(results_dir, run_id)
+    cpu_info = load_cpu_info(run_id)
     cpu_text = format_cpu(cpu_info)
 
     n_features_list = [10, 100, 1000]
@@ -142,8 +132,23 @@ def main():
     fig.text(0.02, 0.02, cpu_text, fontsize=7, verticalalignment="bottom", family="monospace")
     out_path = results_dir / f"speedup_curves.{run_id}.png"
     fig.savefig(out_path, dpi=150)
-    print(f"Saved {out_path}")
     plt.close(fig)
+    return out_path
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Plot HGBT threading benchmark results")
+    parser.add_argument(
+        "run_id",
+        help="Run ID (e.g. 20260218_152651). Reads results/bench_num_threads.{run_id}.csv and .cpu.json.",
+    )
+    args = parser.parse_args()
+    try:
+        path = plot_run(args.run_id)
+        print(f"Saved {path}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
