@@ -1,6 +1,6 @@
 # HGBT threading benchmark
 
-Benchmark HistGradientBoosting fit/predict under different OpenMP thread counts and data shapes. Saves CSV with CPU/platform metadata and scripts to plot speedup curves. Used to collect data across platforms and core counts to evaluate heuristics for [scikit-learn#30662](https://github.com/scikit-learn/scikit-learn/issues/30662) (OpenMP slowdown on small data).
+Benchmark HistGradientBoosting fit/predict under different OpenMP thread counts and data shapes. Used to collect data across platforms and core counts to evaluate heuristics for [scikit-learn#30662](https://github.com/scikit-learn/scikit-learn/issues/30662) (OpenMP slowdown on small data).
 
 ## Setup
 
@@ -30,7 +30,10 @@ pip install -r requirements.txt
 python run_benchmark.py
 ```
 
-Writes to **results/**: `bench_num_threads.{run_id}.csv`, `bench_num_threads.{run_id}.cpu.json`, and `speedup_curves.{run_id}.png`. One command produces the CSV, CPU metadata, and the speedup plot. The CSV has one row per (shape, thread): `n_samples`, `n_features`, `max_num_threads`, `fit_time`, `predict_time`, `run_id`. CPU metadata (system, machine, processor, cores) is in the JSON only.
+- Saves the benchmark data as `results/bench_num_threads.{run_id}.csv`
+- Saves the CPU metadata (system, machine, processor, cores) as `bench_num_threads.{run_id}.cpu.json`
+- Saves the speedup curves as `results/speedup_curves.{run_id}.png` (one figure with 2×3 subplots and CPU info at the bottom).
+- The CSV has one row per (shape, thread): `n_samples`, `n_features`, `max_num_threads`, `fit_time`, `predict_time`, `run_id`.
 
 ## Plot results
 
@@ -44,4 +47,4 @@ Example:
 python plot_results.py 20260218_160458
 ```
 
-Use this to **re-plot** an existing run (e.g. after copying **results/** from another machine or to regenerate the figure without re-running the benchmark). Reads `results/bench_num_threads.{run_id}.csv` and `results/bench_num_threads.{run_id}.cpu.json`, and saves `results/speedup_curves.{run_id}.png` (one figure with 2×3 subplots and CPU info at the bottom).
+Use this to **re-plot** an existing run (e.g. after copying `results/` from another machine or to regenerate the figure without re-running the benchmark). Reads `results/bench_num_threads.{run_id}.csv` and `results/bench_num_threads.{run_id}.cpu.json`, and saves `results/speedup_curves.{run_id}.png`.
