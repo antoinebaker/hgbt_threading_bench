@@ -49,9 +49,16 @@ def format_cpu(cpu_dict: dict) -> str:
     """Format CPU dict as multi-line string for figure text."""
     if not cpu_dict:
         return "CPU info not found"
-    # Exclude run_id from display if present; show CPU fields only
-    skip = {"run_id"}
+    skip = {"run_id", "threadpool_info", "llvm_openmp_version"}
     lines = [f"{k}: {v}" for k, v in cpu_dict.items() if k not in skip]
+    if "threadpool_info" in cpu_dict and isinstance(cpu_dict["threadpool_info"], list):
+        for i, lib in enumerate(cpu_dict["threadpool_info"]):
+            if isinstance(lib, dict):
+                parts = [f"{k}={v}" for k, v in lib.items()]
+                lines.append(f"threadpool {i}: " + " ".join(parts))
+    if "llvm_openmp_version" in cpu_dict:
+        v = cpu_dict["llvm_openmp_version"]
+        lines.append(f"llvm_openmp_version: {v if v is not None else '—'}")
     return "\n".join(lines) if lines else "CPU info not found"
 
 

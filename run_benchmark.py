@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import platform
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
@@ -16,7 +17,26 @@ from time import perf_counter
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.datasets import make_regression
-from threadpoolctl import threadpool_limits
+from threadpoolctl import threadpool_info, threadpool_limits
+
+
+def _get_llvm_openmp_version() -> str | None:
+    """Try to get llvm-openmp version from conda; return None on failure."""
+    try:
+        result = subprocess.run(
+            ["conda", "list", "llvm-openmp"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout:
+            for line in result.stdout.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] == "llvm-openmp":
+                    return parts[1]
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
 
 
 def get_cpu_info():
@@ -32,6 +52,18 @@ def get_cpu_info():
         info["cpu_physical_cores"] = psutil.cpu_count(logical=False)
     except ImportError:
         info["cpu_physical_cores"] = None
+
+    # Threadpool info (sklearn.ensemble already loaded); omit filepath and version
+    try:
+        raw = threadpool_info()
+        info["threadpool_info"] = [
+            {k: v for k, v in d.items() if k not in ("filepath", "version")}
+            for d in raw
+        ]
+    except Exception:
+        info["threadpool_info"] = []
+
+    info["llvm_openmp_version"] = _get_llvm_openmp_version()
     return info
 
 
