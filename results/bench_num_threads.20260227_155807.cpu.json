@@ -1,0 +1,33 @@
+{
+  "run_id": "20260227_155807",
+  "system": "Linux",
+  "machine": "x86_64",
+  "processor": "x86_64",
+  "cpu_logical_cores": 8,
+  "cpu_physical_cores": 8,
+  "threadpool_info": [
+    {
+      "user_api": "blas",
+      "internal_api": "openblas",
+      "num_threads": 8,
+      "prefix": "libscipy_openblas",
+      "threading_layer": "pthreads",
+      "architecture": "Haswell"
+    },
+    {
+      "user_api": "blas",
+      "internal_api": "openblas",
+      "num_threads": 8,
+      "prefix": "libscipy_openblas",
+      "threading_layer": "pthreads",
+      "architecture": "Haswell"
+    },
+    {
+      "user_api": "openmp",
+      "internal_api": "openmp",
+      "num_threads": 8,
+      "prefix": "libgomp"
+    }
+  ],
+  "llvm_openmp_version": null
+}
