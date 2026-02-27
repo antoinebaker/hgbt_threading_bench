@@ -1,0 +1,17 @@
+{
+  "run_id": "20260226_165149",
+  "system": "Darwin",
+  "machine": "arm64",
+  "processor": "arm",
+  "cpu_logical_cores": 8,
+  "cpu_physical_cores": 8,
+  "threadpool_info": [
+    {
+      "user_api": "openmp",
+      "internal_api": "openmp",
+      "num_threads": 8,
+      "prefix": "libomp"
+    }
+  ],
+  "llvm_openmp_version": null
+}
