@@ -1,0 +1,33 @@
+{
+  "run_id": "20260227_150249",
+  "system": "Linux",
+  "machine": "aarch64",
+  "processor": "aarch64",
+  "cpu_logical_cores": 16,
+  "cpu_physical_cores": 16,
+  "threadpool_info": [
+    {
+      "user_api": "blas",
+      "internal_api": "openblas",
+      "num_threads": 16,
+      "prefix": "libscipy_openblas",
+      "threading_layer": "pthreads",
+      "architecture": "neoversen1"
+    },
+    {
+      "user_api": "blas",
+      "internal_api": "openblas",
+      "num_threads": 16,
+      "prefix": "libscipy_openblas",
+      "threading_layer": "pthreads",
+      "architecture": "neoversen1"
+    },
+    {
+      "user_api": "openmp",
+      "internal_api": "openmp",
+      "num_threads": 16,
+      "prefix": "libgomp"
+    }
+  ],
+  "llvm_openmp_version": null
+}
