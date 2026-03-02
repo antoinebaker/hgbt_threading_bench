@@ -9,10 +9,14 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import List
 
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.ticker import NullLocator
 import pandas as pd
+
+RESULTS_DIR = Path("results")
 
 
 def compute_speedups(records):
@@ -34,8 +38,7 @@ def compute_speedups(records):
 
 def load_cpu_info(run_id: str) -> dict:
     """Load CPU metadata from results/bench_num_threads.{run_id}.cpu.json."""
-    results_dir = Path("results")
-    cpu_path = results_dir / f"bench_num_threads.{run_id}.cpu.json"
+    cpu_path = RESULTS_DIR / f"bench_num_threads.{run_id}.cpu.json"
     if not cpu_path.exists():
         return {}
     try:
@@ -49,7 +52,7 @@ def format_cpu(cpu_dict: dict) -> str:
     """Format CPU dict as multi-line string for figure text."""
     if not cpu_dict:
         return "CPU info not found"
-    skip = {"run_id", "threadpool_info", "llvm_openmp_version"}
+    skip = {"threadpool_info", "llvm_openmp_version"}
     lines = [f"{k}: {v}" for k, v in cpu_dict.items() if k not in skip]
     if "threadpool_info" in cpu_dict and isinstance(cpu_dict["threadpool_info"], list):
         for i, lib in enumerate(cpu_dict["threadpool_info"]):
@@ -62,10 +65,20 @@ def format_cpu(cpu_dict: dict) -> str:
     return "\n".join(lines) if lines else "CPU info not found"
 
 
-def plot_run(run_id: str) -> Path:
-    """Load CSV and CPU JSON, build speedup figure, save to results/speedup_curves.{run_id}.png. Returns path to PNG."""
-    results_dir = Path("results")
-    csv_path = results_dir / f"bench_num_threads.{run_id}.csv"
+def get_all_run_ids() -> List[str]:
+    """Discover run IDs from results/bench_num_threads.*.csv. Returns sorted list."""
+    run_ids = []
+    for p in RESULTS_DIR.glob("bench_num_threads.*.csv"):
+        # stem is e.g. "bench_num_threads.20260226_165149"
+        run_id = p.stem.replace("bench_num_threads.", "", 1)
+        if run_id:
+            run_ids.append(run_id)
+    return sorted(run_ids)
+
+
+def make_speedup_figure(run_id: str) -> plt.Figure:
+    """Load CSV and CPU JSON, build speedup figure (2×3 subplots). Caller must close the figure."""
+    csv_path = RESULTS_DIR / f"bench_num_threads.{run_id}.csv"
     if not csv_path.exists():
         raise FileNotFoundError(f"{csv_path} not found")
 
@@ -95,7 +108,7 @@ def plot_run(run_id: str) -> Path:
                     x="max_num_threads",
                     y="fit_speedup",
                     ax=ax,
-                    label=f"X.shape=({n_samples}, {n_feat})",
+                    label=f"{n_samples=}",
                 )
         ax.axhline(1, 0.95, 8.5, linestyle="--", color="gray")
         ax.set(
@@ -107,7 +120,7 @@ def plot_run(run_id: str) -> Path:
             ylabel="Speedup (fit)" if col == 0 else "",
             yticks=[0.1, 0.2, 0.5, 1, 2, 5, 10],
             yticklabels=["0.1x", "0.2x", "0.5x", "1x", "2x", "5x", "10x"],
-            title=f"n_features={n_features}",
+            title=f"{n_features=}",
         )
         ax.xaxis.set_minor_locator(NullLocator())
 
@@ -119,7 +132,7 @@ def plot_run(run_id: str) -> Path:
                     x="max_num_threads",
                     y="predict_speedup",
                     ax=ax,
-                    label=f"X.shape=({n_samples}, {n_feat})",
+                    label=f"{n_samples=}",
                 )
         ax.axhline(1, 0.95, 8.5, linestyle="--", color="gray")
         ax.set(
@@ -137,9 +150,32 @@ def plot_run(run_id: str) -> Path:
 
     fig.tight_layout(rect=[0, 0.18, 1, 1])
     fig.text(0.02, 0.02, cpu_text, fontsize=7, verticalalignment="bottom", family="monospace")
-    out_path = results_dir / f"speedup_curves.{run_id}.png"
+    return fig
+
+
+def plot_run(run_id: str) -> Path:
+    """Load CSV and CPU JSON, build speedup figure, save to results/speedup_curves.{run_id}.png. Returns path to PNG."""
+    fig = make_speedup_figure(run_id)
+    out_path = RESULTS_DIR / f"speedup_curves.{run_id}.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
+    return out_path
+
+
+def plot_all_runs() -> Path:
+    """Plot all runs to a single PDF (one run per page). Returns path to PDF."""
+    run_ids = get_all_run_ids()
+    if not run_ids:
+        raise ValueError("No bench_num_threads.*.csv files found in results/")
+    out_path = RESULTS_DIR / "speedup_curves_all.pdf"
+    with PdfPages(out_path) as pdf:
+        for run_id in run_ids:
+            try:
+                fig = make_speedup_figure(run_id)
+                pdf.savefig(fig, dpi=150)
+                plt.close(fig)
+            except (FileNotFoundError, ValueError) as e:
+                print(f"Skipping {run_id}: {e}", file=sys.stderr)
     return out_path
 
 
@@ -147,12 +183,24 @@ def main():
     parser = argparse.ArgumentParser(description="Plot HGBT threading benchmark results")
     parser.add_argument(
         "run_id",
-        help="Run ID (e.g. 20260218_152651). Reads results/bench_num_threads.{run_id}.csv and .cpu.json.",
+        nargs="?",
+        help="Run ID (e.g. 20260218_152651). Reads results/bench_num_threads.{run_id}.csv and .cpu.json. Required unless --all.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Plot all runs to one PDF (one run per page). Writes results/speedup_curves_all.pdf.",
     )
     args = parser.parse_args()
     try:
-        path = plot_run(args.run_id)
-        print(f"Saved {path}")
+        if args.all:
+            path = plot_all_runs()
+            print(f"Saved {path}")
+        else:
+            if not args.run_id:
+                parser.error("run_id required unless --all")
+            path = plot_run(args.run_id)
+            print(f"Saved {path}")
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

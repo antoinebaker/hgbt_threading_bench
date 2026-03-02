@@ -143,9 +143,11 @@ def main():
         json.dump({"run_id": run_id, **cpu_info}, f, indent=2)
     print(f"Wrote {cpu_path}")
 
-    from plot_results import plot_run
-    plot_path = plot_run(run_id)
-    print(f"Wrote {plot_path}")
+    from plot_results import plot_run, plot_all_runs
+    png_path = plot_run(run_id)
+    print(f"Wrote {png_path}")
+    pdf_path = plot_all_runs()
+    print(f"Wrote {pdf_path}")
 
 
 if __name__ == "__main__":
