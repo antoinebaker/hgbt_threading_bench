@@ -7,6 +7,7 @@ See: https://github.com/scikit-learn/scikit-learn/issues/30662
 
 import argparse
 import json
+import math
 import os
 import platform
 import subprocess
@@ -112,7 +113,8 @@ def main():
         (100, 1_000),
         (1_000, 1_000),
     ]
-    all_max_num_threads = [1, 2, 4, 8]
+    max_threads = os.cpu_count() or 8
+    all_max_num_threads = [2**i for i in range(int(math.log2(max_threads)) + 1)]
 
     records = []
     for max_num_threads in all_max_num_threads:

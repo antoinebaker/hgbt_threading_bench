@@ -96,6 +96,7 @@ def make_speedup_figure(run_id: str) -> plt.Figure:
     cpu_text = format_cpu(cpu_info)
 
     n_features_list = [10, 100, 1000]
+    thread_values = sorted(speedups["max_num_threads"].unique())
     fig, axs = plt.subplots(2, 3, figsize=(12, 8), sharex=True, sharey=True)
 
     for col, n_features in enumerate(n_features_list):
@@ -114,8 +115,8 @@ def make_speedup_figure(run_id: str) -> plt.Figure:
         ax.set(
             xscale="log",
             xlabel="" if col > 0 else "",
-            xticks=[1, 2, 4, 8],
-            xticklabels=[1, 2, 4, 8],
+            xticks=thread_values,
+            xticklabels=thread_values,
             yscale="log",
             ylabel="Speedup (fit)" if col == 0 else "",
             yticks=[0.1, 0.2, 0.5, 1, 2, 5, 10],
@@ -138,8 +139,8 @@ def make_speedup_figure(run_id: str) -> plt.Figure:
         ax.set(
             xscale="log",
             xlabel="Number of threads",
-            xticks=[1, 2, 4, 8],
-            xticklabels=[1, 2, 4, 8],
+            xticks=thread_values,
+            xticklabels=thread_values,
             yscale="log",
             ylabel="Speedup (predict)" if col == 0 else "",
             yticks=[0.1, 0.2, 0.5, 1, 2, 5, 10],
