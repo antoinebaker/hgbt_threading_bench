@@ -66,14 +66,24 @@ def format_cpu(cpu_dict: dict) -> str:
 
 
 def get_all_run_ids() -> List[str]:
-    """Discover run IDs from results/bench_num_threads.*.csv. Returns sorted list."""
+    """Discover run IDs from results/bench_num_threads.*.csv. 
+    Returns list ordered by system, machine, cpu_logical_cores (from .cpu.json).
+    """
     run_ids = []
     for p in RESULTS_DIR.glob("bench_num_threads.*.csv"):
         # stem is e.g. "bench_num_threads.20260226_165149"
         run_id = p.stem.replace("bench_num_threads.", "", 1)
         if run_id:
             run_ids.append(run_id)
-    return sorted(run_ids)
+
+    def sort_key(run_id: str):
+        cpu = load_cpu_info(run_id)
+        system = cpu.get("system")
+        machine = cpu.get("machine")
+        cores = cpu.get("cpu_logical_cores")
+        return (system, machine, cores)
+
+    return sorted(run_ids, key=sort_key)
 
 
 def make_speedup_figure(run_id: str) -> plt.Figure:
