@@ -4,25 +4,14 @@ Benchmark HistGradientBoosting fit/predict under different OpenMP thread counts 
 
 ## Setup
 
-**Conda:**
+Create environment using `conda` or `mamba`.
 
 ```bash
-cd hgbt_threading_bench
-conda create -n hgbt_bench python=3.11 -y
-conda activate hgbt_bench
-pip install -r requirements.txt
-```
-
-**venv:**
-
-```bash
-cd hgbt_threading_bench
-python3 -m venv .venv
-source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+conda create -n hgbt_bench -c conda-forge scikit-learn matplotlib pandas psutil py-cpuinfo
 ```
 
 `psutil` is required for physical core count; without it only logical cores are recorded.
+`py-cpuinfo` enables recording of L1/L2/L3 cache sizes and CPU architecture/family in the CPU JSON.
 
 ## Run benchmark
 

@@ -6,26 +6,29 @@ See: https://github.com/scikit-learn/scikit-learn/issues/30662
 """
 
 import argparse
+import io
 import json
 import math
 import os
 import platform
 import subprocess
+from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 
 import pandas as pd
+from sklearn import show_versions
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.datasets import make_regression
 from threadpoolctl import threadpool_info, threadpool_limits
 
 
-def _get_llvm_openmp_version() -> str | None:
-    """Try to get llvm-openmp version from conda; return None on failure."""
+def _get_package_version(pkg_name: str) -> str | None:
+    """Try to get package version from conda list; return None on failure."""
     try:
         result = subprocess.run(
-            ["conda", "list", "llvm-openmp"],
+            ["conda", "list", pkg_name],
             capture_output=True,
             text=True,
             timeout=5,
@@ -33,7 +36,7 @@ def _get_llvm_openmp_version() -> str | None:
         if result.returncode == 0 and result.stdout:
             for line in result.stdout.splitlines():
                 parts = line.split()
-                if len(parts) >= 2 and parts[0] == "llvm-openmp":
+                if len(parts) >= 2 and parts[0] == pkg_name:
                     return parts[1]
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
@@ -54,17 +57,43 @@ def get_cpu_info():
     except ImportError:
         info["cpu_physical_cores"] = None
 
-    # Threadpool info (sklearn.ensemble already loaded); omit filepath and version
+    # Threadpool info: keep only openmp entries (omit filepath)
     try:
-        raw = threadpool_info()
         info["threadpool_info"] = [
-            {k: v for k, v in d.items() if k not in ("filepath", "version")}
-            for d in raw
+            {k: v for k, v in d.items() if k != "filepath"}
+            for d in threadpool_info() if d.get("user_api") == "openmp"
         ]
     except Exception:
         info["threadpool_info"] = []
 
-    info["llvm_openmp_version"] = _get_llvm_openmp_version()
+    info["llvm_openmp_version"] = _get_package_version("llvm-openmp")
+    info["libgomp_version"] = _get_package_version("libgomp")
+
+    # Capture sklearn.show_versions() ouput
+    info["sklearn_versions"] = show_versions()
+
+    # Optional: L1/L2/L3 cache sizes and CPU architecture/family via py-cpuinfo
+    _cpuinfo_keys = (
+        "l1_data_cache_size",
+        "l1_instruction_cache_size",
+        "l2_cache_size",
+        "l3_cache_size",
+        "cpu_architecture",
+        "cpu_family",
+    )
+    try:
+        import cpuinfo
+        raw = cpuinfo.get_cpu_info()
+        info["l1_data_cache_size"] = raw.get("l1_data_cache_size")
+        info["l1_instruction_cache_size"] = raw.get("l1_instruction_cache_size")
+        info["l2_cache_size"] = raw.get("l2_cache_size")
+        info["l3_cache_size"] = raw.get("l3_cache_size")
+        info["cpu_architecture"] = raw.get("arch")
+        info["cpu_family"] = raw.get("family")
+    except Exception:
+        for key in _cpuinfo_keys:
+            info[key] = None
+
     return info
 
 
