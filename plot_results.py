@@ -113,6 +113,8 @@ def make_speedup_figure(run_id: str) -> plt.Figure:
         # Row 0: fit
         ax = axs[0, col]
         subset = speedups.query("n_features == @n_features")
+        ax.axhline(1, linestyle="--", color="gray", zorder=0)
+        ax.plot(thread_values, thread_values, linestyle="--", color="gray", zorder=0)
         if not subset.empty:
             for (n_samples, n_feat), group in subset.groupby(["n_samples", "n_features"]):
                 group.plot(
@@ -121,7 +123,6 @@ def make_speedup_figure(run_id: str) -> plt.Figure:
                     ax=ax,
                     label=f"{n_samples=}",
                 )
-        ax.axhline(1, 0.95, 8.5, linestyle="--", color="gray")
         ax.set(
             xscale="log",
             xlabel="" if col > 0 else "",
@@ -137,6 +138,8 @@ def make_speedup_figure(run_id: str) -> plt.Figure:
 
         # Row 1: predict
         ax = axs[1, col]
+        ax.axhline(1, linestyle="--", color="gray", zorder=0)
+        ax.plot(thread_values, thread_values, linestyle="--", color="gray", zorder=0)
         if not subset.empty:
             for (n_samples, n_feat), group in subset.groupby(["n_samples", "n_features"]):
                 group.plot(
@@ -145,7 +148,6 @@ def make_speedup_figure(run_id: str) -> plt.Figure:
                     ax=ax,
                     label=f"{n_samples=}",
                 )
-        ax.axhline(1, 0.95, 8.5, linestyle="--", color="gray")
         ax.set(
             xscale="log",
             xlabel="Number of threads",
