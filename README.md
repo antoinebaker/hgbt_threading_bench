@@ -11,7 +11,7 @@ conda create -n hgbt_bench -c conda-forge scikit-learn matplotlib pandas psutil 
 ```
 
 `psutil` is required for physical core count; without it only logical cores are recorded.
-`py-cpuinfo` enables recording of L1/L2/L3 cache sizes and CPU architecture/family in the CPU JSON.
+`py-cpuinfo` is tried first for L1/L2/L3 cache sizes and CPU architecture/family; the runner then falls back to `lscpu` and `/proc/cpuinfo` on Linux and `system_profiler` / `sysctl` on macOS so the CPU JSON can still fill `l1_data_cache_size`, `l1_instruction_cache_size`, `l2_cache_size`, `l3_cache_size`, `cpu_family`, and on Apple Silicon `cpu_performance_cores` / `cpu_efficiency_cores` when available.
 
 ## Run benchmark
 

@@ -43,8 +43,172 @@ def _get_package_version(pkg_name: str) -> str | None:
     return None
 
 
+def _coalesce_set(info: dict, key: str, value) -> None:
+    """Set info[key] only if missing or None and value is not None."""
+    if value is not None and info.get(key) is None:
+        info[key] = value
+
+
+def _apply_from_lscpu(info: dict) -> None:
+    if platform.system() != "Linux":
+        return
+    try:
+        result = subprocess.run(
+            ["lscpu"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0 or not result.stdout:
+            return
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return
+
+    for line in result.stdout.splitlines():
+        if ":" not in line:
+            continue
+        label, rest = line.split(":", 1)
+        label_l = label.strip().lower()
+        val = rest.strip()
+        if not val:
+            continue
+        if label_l in ("l1d cache", "l1d"):
+            _coalesce_set(info, "l1_data_cache_size", val)
+        elif label_l in ("l1i cache", "l1i"):
+            _coalesce_set(info, "l1_instruction_cache_size", val)
+        elif label_l in ("l2 cache", "l2"):
+            _coalesce_set(info, "l2_cache_size", val)
+        elif label_l in ("l3 cache", "l3"):
+            _coalesce_set(info, "l3_cache_size", val)
+        elif label_l == "cpu family":
+            _coalesce_set(info, "cpu_family", val)
+
+
+def _apply_from_proc_cpuinfo(info: dict) -> None:
+    if platform.system() != "Linux":
+        return
+    path = Path("/proc/cpuinfo")
+    if not path.is_file():
+        return
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+
+    cache_size_raw: str | None = None
+    family_raw: str | None = None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.lower().startswith("cache size"):
+            _, _, rhs = line.partition(":")
+            rhs = rhs.strip()
+            if rhs and cache_size_raw is None:
+                cache_size_raw = rhs
+        elif line.lower().startswith("cpu family"):
+            _, _, rhs = line.partition(":")
+            rhs = rhs.strip()
+            if rhs and family_raw is None:
+                family_raw = rhs
+
+    if cache_size_raw is not None:
+        _coalesce_set(info, "l2_cache_size", cache_size_raw)
+    if family_raw is not None:
+        _coalesce_set(info, "cpu_family", family_raw)
+
+
+def _apply_from_system_profiler(info: dict) -> None:
+    if platform.system() != "Darwin":
+        return
+    try:
+        result = subprocess.run(
+            ["system_profiler", "SPHardwareDataType"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0 or not result.stdout:
+            return
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return
+
+    for line in result.stdout.splitlines():
+        raw = line.strip()
+        if not raw or ":" not in raw:
+            continue
+        label, rest = raw.split(":", 1)
+        label_l = label.strip().lower()
+        rhs = rest.strip()
+        if label_l == "chip":
+            _coalesce_set(info, "cpu_family", rhs)
+            continue
+        if "cache" in label_l:
+            if "l2" in label_l and rhs:
+                _coalesce_set(info, "l2_cache_size", rhs)
+            if "l3" in label_l and rhs:
+                _coalesce_set(info, "l3_cache_size", rhs)
+
+
+def _sysctl_read_int_darwin(key: str) -> int | None:
+    try:
+        r = subprocess.run(
+            ["sysctl", "-n", key],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode != 0:
+            return None
+        v = r.stdout.strip()
+        if not v:
+            return None
+        n = int(v)
+        if n <= 0:
+            return None
+        return n
+    except (ValueError, FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+
+
+def _apply_from_sysctl_darwin(info: dict) -> None:
+    if platform.system() != "Darwin":
+        return
+
+    l1d = _sysctl_read_int_darwin("hw.l1dcachesize")
+    if l1d is None:
+        l1d = _sysctl_read_int_darwin("hw.perflevel0.l1dcachesize")
+    l1i = _sysctl_read_int_darwin("hw.l1icachesize")
+    if l1i is None:
+        l1i = _sysctl_read_int_darwin("hw.perflevel0.l1icachesize")
+    l2 = _sysctl_read_int_darwin("hw.l2cachesize")
+    if l2 is None:
+        l2 = _sysctl_read_int_darwin("hw.perflevel0.l2cachesize")
+    l3 = _sysctl_read_int_darwin("hw.l3cachesize")
+    if l3 is None:
+        l3 = _sysctl_read_int_darwin("hw.perflevel0.l3cachesize")
+
+    _coalesce_set(info, "l1_data_cache_size", l1d)
+    _coalesce_set(info, "l1_instruction_cache_size", l1i)
+    _coalesce_set(info, "l2_cache_size", l2)
+    _coalesce_set(info, "l3_cache_size", l3)
+
+    # Apple Silicon: perflevel0 = performance, perflevel1 = efficiency.
+    # Only record when arm64 or hybrid sysctl is clearly present (avoid Intel mislabels).
+    p_perf = _sysctl_read_int_darwin("hw.perflevel0.physicalcpu")
+    p_eff = _sysctl_read_int_darwin("hw.perflevel1.physicalcpu")
+    if platform.machine() == "arm64" or p_eff is not None:
+        _coalesce_set(info, "cpu_performance_cores", p_perf)
+        _coalesce_set(info, "cpu_efficiency_cores", p_eff)
+
+
 def get_cpu_info():
-    """Collect CPU and platform info (portable). Uses psutil for physical cores if available."""
+    """Collect CPU and platform info (portable). Uses psutil for physical cores if available.
+
+    Cache sizes and cpu_family are filled from py-cpuinfo first, then (Linux) lscpu and
+    /proc/cpuinfo, then (macOS) system_profiler and sysctl. First non-None value wins per key.
+
+    On Apple Silicon, cpu_performance_cores / cpu_efficiency_cores come from sysctl when
+    available; total physical cores remain in cpu_physical_cores (e.g. 8 = 4 + 4).
+    """
     info = {
         "system": platform.system(),
         "machine": platform.machine(),
@@ -69,30 +233,61 @@ def get_cpu_info():
     info["llvm_openmp_version"] = _get_package_version("llvm-openmp")
     info["libgomp_version"] = _get_package_version("libgomp")
 
-    # Capture sklearn.show_versions() ouput
-    info["sklearn_versions"] = show_versions()
+    # Capture sklearn.show_versions() output (it prints, does not return)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        show_versions()
+    info["sklearn_versions"] = buf.getvalue()
 
-    # Optional: L1/L2/L3 cache sizes and CPU architecture/family via py-cpuinfo
-    _cpuinfo_keys = (
+    _extended_keys = (
         "l1_data_cache_size",
         "l1_instruction_cache_size",
         "l2_cache_size",
         "l3_cache_size",
         "cpu_architecture",
         "cpu_family",
+        "cpu_performance_cores",
+        "cpu_efficiency_cores",
     )
+    for key in _extended_keys:
+        info[key] = None
+
+    # 1) py-cpuinfo
     try:
         import cpuinfo
         raw = cpuinfo.get_cpu_info()
-        info["l1_data_cache_size"] = raw.get("l1_data_cache_size")
-        info["l1_instruction_cache_size"] = raw.get("l1_instruction_cache_size")
-        info["l2_cache_size"] = raw.get("l2_cache_size")
-        info["l3_cache_size"] = raw.get("l3_cache_size")
-        info["cpu_architecture"] = raw.get("arch")
-        info["cpu_family"] = raw.get("family")
+        _coalesce_set(info, "l1_data_cache_size", raw.get("l1_data_cache_size"))
+        _coalesce_set(info, "l1_instruction_cache_size", raw.get("l1_instruction_cache_size"))
+        _coalesce_set(info, "l2_cache_size", raw.get("l2_cache_size"))
+        _coalesce_set(info, "l3_cache_size", raw.get("l3_cache_size"))
+        _coalesce_set(info, "cpu_architecture", raw.get("arch"))
+        _coalesce_set(info, "cpu_family", raw.get("family"))
     except Exception:
-        for key in _cpuinfo_keys:
-            info[key] = None
+        pass
+
+    # 2) lscpu (Linux)
+    try:
+        _apply_from_lscpu(info)
+    except Exception:
+        pass
+
+    # 3) /proc/cpuinfo (Linux)
+    try:
+        _apply_from_proc_cpuinfo(info)
+    except Exception:
+        pass
+
+    # 4) system_profiler (macOS)
+    try:
+        _apply_from_system_profiler(info)
+    except Exception:
+        pass
+
+    # 5) sysctl (macOS)
+    try:
+        _apply_from_sysctl_darwin(info)
+    except Exception:
+        pass
 
     return info
 
