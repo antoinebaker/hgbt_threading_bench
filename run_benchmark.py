@@ -200,11 +200,26 @@ def _apply_from_sysctl_darwin(info: dict) -> None:
         _coalesce_set(info, "cpu_efficiency_cores", p_eff)
 
 
+def _apply_from_cpuinfo(info: dict) -> None:
+    try:
+        import cpuinfo
+        raw = cpuinfo.get_cpu_info()
+    except Exception:
+        return
+    _coalesce_set(info, "l1_data_cache_size", raw.get("l1_data_cache_size"))
+    _coalesce_set(info, "l1_instruction_cache_size", raw.get("l1_instruction_cache_size"))
+    _coalesce_set(info, "l2_cache_size", raw.get("l2_cache_size"))
+    _coalesce_set(info, "l3_cache_size", raw.get("l3_cache_size"))
+    _coalesce_set(info, "cpu_architecture", raw.get("arch"))
+    _coalesce_set(info, "cpu_family", raw.get("family"))
+
+
 def get_cpu_info():
     """Collect CPU and platform info (portable). Uses psutil for physical cores if available.
 
-    Cache sizes and cpu_family are filled from py-cpuinfo first, then (Linux) lscpu and
-    /proc/cpuinfo, then (macOS) system_profiler and sysctl. First non-None value wins per key.
+    Cache sizes and cpu_family are filled from (Linux) lscpu and /proc/cpuinfo, then (macOS)
+    system_profiler and sysctl, then py-cpuinfo for any keys still missing. First non-None value
+    wins per key.
 
     On Apple Silicon, cpu_performance_cores / cpu_efficiency_cores come from sysctl when
     available; total physical cores remain in cpu_physical_cores (e.g. 8 = 4 + 4).
@@ -252,42 +267,18 @@ def get_cpu_info():
     for key in _extended_keys:
         info[key] = None
 
-    # 1) py-cpuinfo
-    try:
-        import cpuinfo
-        raw = cpuinfo.get_cpu_info()
-        _coalesce_set(info, "l1_data_cache_size", raw.get("l1_data_cache_size"))
-        _coalesce_set(info, "l1_instruction_cache_size", raw.get("l1_instruction_cache_size"))
-        _coalesce_set(info, "l2_cache_size", raw.get("l2_cache_size"))
-        _coalesce_set(info, "l3_cache_size", raw.get("l3_cache_size"))
-        _coalesce_set(info, "cpu_architecture", raw.get("arch"))
-        _coalesce_set(info, "cpu_family", raw.get("family"))
-    except Exception:
-        pass
-
-    # 2) lscpu (Linux)
-    try:
-        _apply_from_lscpu(info)
-    except Exception:
-        pass
-
-    # 3) /proc/cpuinfo (Linux)
-    try:
-        _apply_from_proc_cpuinfo(info)
-    except Exception:
-        pass
-
-    # 4) system_profiler (macOS)
-    try:
-        _apply_from_system_profiler(info)
-    except Exception:
-        pass
-
-    # 5) sysctl (macOS)
-    try:
-        _apply_from_sysctl_darwin(info)
-    except Exception:
-        pass
+    # lscpu → /proc/cpuinfo → system_profiler → sysctl → py-cpuinfo; first wins per key.
+    for apply_func in (
+        _apply_from_lscpu,
+        _apply_from_proc_cpuinfo,
+        _apply_from_system_profiler,
+        _apply_from_sysctl_darwin,
+        _apply_from_cpuinfo,
+    ):
+        try:
+            apply_func(info)
+        except Exception:
+            pass
 
     return info
 
