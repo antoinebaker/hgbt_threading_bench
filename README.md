@@ -11,7 +11,7 @@ conda create -n hgbt_bench -c conda-forge scikit-learn matplotlib pandas psutil 
 ```
 
 `psutil` is optional; with it the CPU JSON records physical core count (`cpu_physical_cores`), otherwise that field is null.
-On Linux the runner fills cache sizes and related fields from `lscpu` and `/proc/cpuinfo`; on macOS from `system_profiler` and `sysctl` (including `cpu_performance_cores` / `cpu_efficiency_cores` on Apple Silicon when present). `py-cpuinfo` runs last and only supplies keys still missing (`l1_data_cache_size`, `l1_instruction_cache_size`, `l2_cache_size`, `l3_cache_size`, `cpu_architecture`, `cpu_family`, etc.). First non-null value wins per field.
+`py-cpuinfo` is tried first for L1/L2/L3 cache sizes and CPU architecture/family; the runner then fills any remaining fields from `lscpu` and `/proc/cpuinfo` on Linux and `system_profiler` / `sysctl` on macOS (including `cpu_performance_cores` / `cpu_efficiency_cores` on Apple Silicon when present). First non-null value wins per field.
 
 ## Run benchmark
 

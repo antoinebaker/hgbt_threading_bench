@@ -217,9 +217,9 @@ def _apply_from_cpuinfo(info: dict) -> None:
 def get_cpu_info():
     """Collect CPU and platform info (portable). Uses psutil for physical cores if available.
 
-    Cache sizes and cpu_family are filled from (Linux) lscpu and /proc/cpuinfo, then (macOS)
-    system_profiler and sysctl, then py-cpuinfo for any keys still missing. First non-None value
-    wins per key.
+    Cache sizes and cpu_family are filled from py-cpuinfo first, then (Linux) lscpu and
+    /proc/cpuinfo, then (macOS) system_profiler and sysctl for any keys still missing. First
+    non-None value wins per key.
 
     On Apple Silicon, cpu_performance_cores / cpu_efficiency_cores come from sysctl when
     available; total physical cores remain in cpu_physical_cores (e.g. 8 = 4 + 4).
@@ -267,13 +267,13 @@ def get_cpu_info():
     for key in _extended_keys:
         info[key] = None
 
-    # lscpu → /proc/cpuinfo → system_profiler → sysctl → py-cpuinfo; first wins per key.
+    # py-cpuinfo → lscpu → /proc/cpuinfo → system_profiler → sysctl; first wins per key.
     for apply_func in (
+        _apply_from_cpuinfo,
         _apply_from_lscpu,
         _apply_from_proc_cpuinfo,
         _apply_from_system_profiler,
         _apply_from_sysctl_darwin,
-        _apply_from_cpuinfo,
     ):
         try:
             apply_func(info)
