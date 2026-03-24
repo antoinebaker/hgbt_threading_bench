@@ -9,7 +9,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import List
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -36,7 +35,7 @@ def compute_speedups(records):
     return pd.concat(speedups, ignore_index=True)
 
 
-def load_cpu_info(run_id: str) -> dict:
+def load_cpu_info(run_id):
     """Load CPU metadata from results/bench_num_threads.{run_id}.cpu.json."""
     cpu_path = RESULTS_DIR / f"bench_num_threads.{run_id}.cpu.json"
     if not cpu_path.exists():
@@ -48,7 +47,7 @@ def load_cpu_info(run_id: str) -> dict:
         return {}
 
 
-def format_cpu(cpu_dict: dict) -> str:
+def format_cpu(cpu_dict):
     """Format CPU dict as multi-line string for figure text."""
     if not cpu_dict:
         return "CPU info not found"
@@ -65,10 +64,8 @@ def format_cpu(cpu_dict: dict) -> str:
     return "\n".join(lines) if lines else "CPU info not found"
 
 
-def get_all_run_ids() -> List[str]:
-    """Discover run IDs from results/bench_num_threads.*.csv. 
-    Returns list ordered by system, machine, cpu_logical_cores (from .cpu.json).
-    """
+def get_all_run_ids():
+    """Run IDs under results/, ordered by system, machine, cpu_logical_cores."""
     run_ids = []
     for p in RESULTS_DIR.glob("bench_num_threads.*.csv"):
         # stem is e.g. "bench_num_threads.20260226_165149"
@@ -86,22 +83,12 @@ def get_all_run_ids() -> List[str]:
     return sorted(run_ids, key=sort_key)
 
 
-def make_speedup_figure(run_id: str) -> plt.Figure:
-    """Load CSV and CPU JSON, build speedup figure (2×3 subplots). Caller must close the figure."""
-    csv_path = RESULTS_DIR / f"bench_num_threads.{run_id}.csv"
-    if not csv_path.exists():
-        raise FileNotFoundError(f"{csv_path} not found")
+def load_speedups_for_run(run_id):
+    return compute_speedups(pd.read_csv(RESULTS_DIR / f"bench_num_threads.{run_id}.csv"))
 
-    records = pd.read_csv(csv_path)
-    required = ["n_samples", "n_features", "max_num_threads", "fit_time", "predict_time", "run_id"]
-    missing = [c for c in required if c not in records.columns]
-    if missing:
-        raise ValueError(f"CSV missing columns: {missing}")
 
-    speedups = compute_speedups(records)
-    if speedups.empty:
-        raise ValueError("No groups (n_samples, n_features) with max_num_threads==1")
-
+def make_speedup_figure(run_id):
+    speedups = load_speedups_for_run(run_id)
     cpu_info = load_cpu_info(run_id)
     cpu_text = format_cpu(cpu_info)
 
@@ -166,7 +153,7 @@ def make_speedup_figure(run_id: str) -> plt.Figure:
     return fig
 
 
-def plot_run(run_id: str) -> Path:
+def plot_run(run_id):
     """Load CSV and CPU JSON, build speedup figure, save to results/speedup_curves.{run_id}.png. Returns path to PNG."""
     fig = make_speedup_figure(run_id)
     out_path = RESULTS_DIR / f"speedup_curves.{run_id}.png"
@@ -175,7 +162,7 @@ def plot_run(run_id: str) -> Path:
     return out_path
 
 
-def plot_all_runs() -> Path:
+def plot_all_runs():
     """Plot all runs to a single PDF (one run per page). Returns path to PDF."""
     run_ids = get_all_run_ids()
     if not run_ids:
